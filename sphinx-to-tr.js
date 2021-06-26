@@ -122,5 +122,11 @@ class ArrayMap extends Map {
   }
 }
 
+if (process.argv.length !== 3)
+  fail(`Usage: ${process.argv[1]} <sphinx-index-file>`, -1)
 new SphinxToTr(process.argv[2]).index()
 
+function fail (message, code) {
+  console.error(message)
+  process.exit(code)
+}
