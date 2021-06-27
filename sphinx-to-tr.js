@@ -8,38 +8,80 @@ const PROTOCOL = 'http:'
 const HOST = 'www.w3.org'
 const PORT = 80
 const WEBROOT = '/TR/'
+const WAITFOR = [] // ['$']
 
 // Working class to translate Sphinx docs to W3C TR/ format
 class SphinxToTr {
-  constructor (path) {
+  constructor (path, appendixLabels) {
     const parsed = Path.parse(path)
     this.relDir = parsed.dir
-    this.page = parsed.name + parsed.ext
+    this.startPage = parsed.name + parsed.ext
+    this.appendixLabels = appendixLabels
+    this.visited = new Set()
   }
 
-  async index () {
+  async index (leader = '', page = this.startPage) {
     try {
-      const { dom, document, url } = await this.loadPage(this.page, 100)
-      const dir = new URL('..', url).href
-      if (!('$' in dom.window))
-        throw new Error('jQuery failed to load')
+      const { dom, document, url } = await this.loadPage(page, 1000)
+      const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
+      WAITFOR.forEach( (wf) => {
+        if (!(wf in dom.window))
+          throw new Error(`${wf} failed to load`)
+      })
+      this.visited.add(page)
       const find =
             // (selectors, from) => (from ? dom.window.$(from).find(selectors) : dom.window.$(selectors)).get() // jQuery
             (selectors, from) => [...(from || document).querySelectorAll(selectors)] // DOM
       const urlStrToElements =
-            find('a')
-            .map( (elt) => [SphinxToTr.noHash(elt), elt] )
-            .filter( ([urlStr, elt]) => [urlStr.startsWith(dir), elt] )
-            .map( ([urlStr, elt]) => [urlStr.substr(dir.length), elt] )
+            SphinxToTr.localHrefs(find('a'), dir)
             .reduce( (acc, [urlStr, elt]) => acc.set(urlStr, elt), new ArrayMap())
       urlStrToElements.delete('')
-      console.log(`${this.page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`)
-      
-      console.log(('li', find('[role=navigation] ul')[0]))
+      console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`)
+      const [primaryToc, indexes, downloads] = find('[role=navigation] > div > ul') // sphinx seems to have three unclassed <ul/>s
+      const numberedSections = find(':scope > li', primaryToc)
+            .filter( (elt) => this.appendixLabels.indexOf(elt.textContent) === -1 )
+
+      // add section numbers to DOM
+      const queue = numberedSections.map((li, idx) => {
+        const secNo = leader + (idx + 1)
+        const az = SphinxToTr.localHrefs(find(':scope > a', li), dir)
+        if (az.length !== 1)
+          throw new Error(`found ${az.length} a elements in TOC entry ${li.outerHTML}`)
+        const [relUrl, a] = az[0] // assume there's only one <a/> in the <li/>
+        const linkText = a.textContent
+
+        a.textContent = ''
+        a.appendChild(SphinxToTr.span(document, secNo, ['secno']))
+        a.appendChild(document.createTextNode(' '))
+        a.appendChild(SphinxToTr.span(document, linkText, ['content']))
+
+        // console.log(relUrl, a.outerHTML)
+        return {relUrl, secNo}
+      })
+      console.log(numberedSections.map(elt => elt.outerHTML))
       // document.documentElement.outerHTML
+      return await Promise.all(queue.map(
+        ({relUrl, secNo}) => this.visited.has(relUrl) ?
+          ['recursion'] :
+          this.index(secNo + '.', relUrl)
+      ))
     } catch (e) {
       console.warn('caught:', e)
     }
+  }
+
+  static span (document, text, classes) {
+    const span = document.createElement('span')
+    span.textContent = text
+    classes.forEach( (c) => span.classList.add(c) )
+    return span
+  }
+
+  static localHrefs (elts, dir) {
+    return elts
+      .map( (elt) => [SphinxToTr.noHash(elt), elt] )
+      .filter( ([urlStr, elt]) => [urlStr.startsWith(dir), elt] )
+      .map( ([urlStr, elt]) => [urlStr.substr(dir.length), elt] )
   }
 
   async loadPage (page, timeout) {
@@ -70,12 +112,13 @@ class SphinxToTr {
 
     function getDom (page) {
       // let url = PROTOCOL + '//' + HOST + ':' + PORT + WEBROOT + page
-      return new JSDOM(Fs.readFileSync(path, 'utf8'), {
-        url: url,
+      return new JSDOM(Fs.readFileSync(path, 'utf8'), Object.assign({
+        url: url
+      }, WAITFOR.length ? {
         runScripts: "dangerously",
         resources: "usable",
         // resources: new ChattyResourceLoader(),
-      })
+      } : {}))
     }
   }
 
@@ -122,9 +165,14 @@ class ArrayMap extends Map {
   }
 }
 
-if (process.argv.length !== 3)
-  fail(`Usage: ${process.argv[1]} <sphinx-index-file>`, -1)
-new SphinxToTr(process.argv[2]).index()
+(async () => {
+if (process.argv.length < 3) {
+  const exe = process.argv[1]
+  fail(`Usage: ${exe} <sphinx-index-file> [non-numbered-section]...
+${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1)
+}
+  console.log(await new SphinxToTr(process.argv[2], process.argv.slice(3)).index())
+})()
 
 function fail (message, code) {
   console.error(message)
