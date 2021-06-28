@@ -1,17 +1,21 @@
 #!/usr/bin/env node
+"use strict"
 
 const Fs = require('fs')
 const Path = require('path')
 const Jsdom = require("jsdom")
 const { JSDOM } = Jsdom
 
-// WAITFOR loads scripts and waits for the listed variables to be
+// How long to wait for a doc to load. Increase when using WAIT_FOR.
+const LOAD_TIMEOUT = 1000
+
+// WAIT_FOR loads scripts and waits for the listed window variables to be
 // initialize. Many scripts do not run in JSDOM so this is sensitive to JSDOM
 // limitiations
-const WAITFOR = [] // ['$']
+const WAIT_FOR = [] // ['$']
 
-// How long to wait for a doc to load. Increase when using WAITFOR.
-const LOAD_TIMEOUT = 1000
+// Debug by showing what pages are being loaded.
+const CHATTY_LOADERw = false
 
 // Working class to translate Sphinx docs to W3C TR/ format
 class SphinxToTr {
@@ -25,7 +29,7 @@ class SphinxToTr {
     this.startPage = parsed.name + parsed.ext
 
     // What document globals should be set in order to process doc
-    this.waitFor = WAITFOR // hard-wired until creating real CLI app
+    this.waitFor = WAIT_FOR // hard-wired until creating real CLI app
 
     // Cache loaded pages, mostly so we don't have to load index.html again
     this.pageCache = new Map()
@@ -148,8 +152,9 @@ class SphinxToTr {
       url: url
     }, this.waitFor.length ? {
       runScripts: "dangerously",
-      resources: "usable",
-      // resources: new ChattyResourceLoader(),
+      resources: CHATTY_LOADER
+        ? new ChattyResourceLoader()
+        : "usable",
     } : {}))
     const document = dom.window.document
 
