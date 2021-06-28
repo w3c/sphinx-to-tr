@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+"use strict"
+
+const SphinxToTr = require('../SphinxToTr');
+
+(async () => {
+  if (process.argv.length < 3) {
+    const exe = process.argv[1]
+    fail(`Usage: ${exe} <sphinx-index-file> [non-numbered-section]...
+${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1)
+  }
+  try {
+    const translator = new SphinxToTr(process.argv[2])
+    const index = await translator.indexPage(process.argv.slice(3))
+    // console.log(index)
+    const copied = await translator.copyRecursively(index)
+    // console.log(JSON.stringify(copied, null, 2))
+  } catch (e) {
+    fail(e, -1)
+  }
+})()
+
+function fail (message, code) {
+  console.error(message)
+  process.exit(code)
+}

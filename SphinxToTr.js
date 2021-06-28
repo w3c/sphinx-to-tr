@@ -1,9 +1,10 @@
-#!/usr/bin/env node
 "use strict"
 
 const Fs = require('fs')
 const Path = require('path')
 const Jsdom = require("jsdom")
+const { InitializedSet, ArrayMap } = require('./lib/containers')
+const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
 const { JSDOM } = Jsdom
 
 // How long to wait for a doc to load. Increase when using WAIT_FOR.
@@ -15,7 +16,7 @@ const LOAD_TIMEOUT = 1000
 const WAIT_FOR = [] // ['$']
 
 // Debug by showing what pages are being loaded.
-const CHATTY_LOADERw = false
+const CHATTY_LOADER = false
 
 // Working class to translate Sphinx docs to W3C TR/ format
 class SphinxToTr {
@@ -236,68 +237,4 @@ class SphinxToTr {
   }
 }
 
-// A set constructed with initial entries
-class InitializedSet extends Set {
-  constructor (relUrl) {
-    super()
-    for (let i = 0; i < arguments.length; ++i)
-      this.add(arguments[i])
-  }
-}
-
-// Handy logging resource loader for JSDOM
-class ChattyResourceLoader extends Jsdom.ResourceLoader {
-  constructor (document) {
-    super(Object.assign({}, { userAgent: 'sphinx-to-tr' }, document))
-  }
-
-  fetch (url, { element, onLoad, onError }) {
-    console.warn('ChattyResourceLoader: fetch(', url, ')')
-    const request = super.fetch(url, { element, onLoad, onError })
-    return request
-  }
-}
-
-// Map of arrays (keeps track of total members)
-class ArrayMap extends Map {
-  total = 0
-
-  set (key, value) {
-    ++this.total
-    if (this.has(key)) {
-      this.get(key).push(value)
-      return this
-    } else {
-      return super.set(key, [value])
-    }
-  }
-
-  delete (key) {
-    if (!this.has(key))
-      return false
-    this.total -= this.get(key).length
-    return super.delete(key)
-  }
-}
-
-(async () => {
-  if (process.argv.length < 3) {
-    const exe = process.argv[1]
-    fail(`Usage: ${exe} <sphinx-index-file> [non-numbered-section]...
-${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1)
-  }
-  try {
-    const translator = new SphinxToTr(process.argv[2])
-    const index = await translator.indexPage(process.argv.slice(3))
-    // console.log(index)
-    const copied = await translator.copyRecursively(index)
-    // console.log(JSON.stringify(copied, null, 2))
-  } catch (e) {
-    fail(e, -1)
-  }
-})()
-
-function fail (message, code) {
-  console.error(message)
-  process.exit(code)
-}
+module.exports = SphinxToTr
