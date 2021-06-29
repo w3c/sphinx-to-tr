@@ -1,0 +1,15 @@
+---
+mdn: true
+previousPublishDate: "2019-12-05"
+specStatus: "ED"
+shortName: "wasm-core"
+prevVersion: "FPWD"
+previousMaturity: "REC"
+editors:
+- name: "Andreas Rossberg"
+  company: "Dfinity Stiftung"
+  companyURL: "https://dfinity.org/"
+  w3cid: 82328
+group: "wasm"
+github: "https://github.com/WebAssembly/spec/"
+xref: "wasm"
