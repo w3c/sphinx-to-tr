@@ -6,14 +6,15 @@ const SphinxToTr = require('../SphinxToTr');
 (async () => {
   if (process.argv.length < 3) {
     const exe = process.argv[1]
-    fail(`Usage: ${exe} <sphinx-index-file> [non-numbered-section]...
+    fail(`Usage: ${exe} <sphinx-index-file> <respec-config-file> <out-directory> [non-numbered-section]...
 ${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1)
   }
   try {
     const translator = new SphinxToTr(process.argv[2])
-    const index = await translator.indexPage(process.argv.slice(3))
+    const index = await translator.indexPage(process.argv.slice(5))
     // console.log(index)
-    const copied = await translator.copyRecursively(index)
+    await translator.updateFrontMatter(process.argv[3])
+    const copied = await translator.copyRecursively(index, process.argv[4])
     // console.log(JSON.stringify(copied, null, 2))
   } catch (e) {
     fail(e, -1)

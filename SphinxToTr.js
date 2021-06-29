@@ -2,6 +2,7 @@
 
 const Fs = require('fs')
 const Path = require('path')
+const Yaml = require('js-yaml')
 const Jsdom = require("jsdom")
 const { InitializedSet, ArrayMap } = require('./lib/containers')
 const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
@@ -43,25 +44,25 @@ class SphinxToTr {
     appendixLabels,
 
     // CSS selector for root of TOC
-    selector = 'toctree-wrapper',
+    selector = '.toctree-wrapper',
 
     // Sphinx index page
     page = this.startPage
   ) {
     const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
 
-    const [primaryToc] = find('.toctree-wrapper > ul') // sphinx seems to have three unclassed <ul/>s
+    const [primaryToc] = find(selector + ' > ul') // sphinx seems to have three unclassed <ul/>s
     const ret = new Map()
     visit(primaryToc, '')
     return ret
 
     function visit (ul, leader) {
-      const numberableSections = SphinxToTr.children(ul, 'li')
+      const numberableSections = SphinxToTr.childrenByName(ul, 'li')
             .filter( (elt) => appendixLabels.indexOf(elt.textContent) === -1 )
       numberableSections.forEach( (li, idx) => {
         const secNo = leader + (idx + 1)
 
-        const az = SphinxToTr.children(li, 'a')
+        const az = SphinxToTr.childrenByName(li, 'a')
         if (az.length !== 1)
           throw new Error(`found ${az.length} <a/> elements in TOC entry ${li.outerHTML}`)
         const a = az[0]
@@ -83,7 +84,7 @@ class SphinxToTr {
         // Don't bother writing; sidebar renumbering will write out all changes.
 
         // Renumber nested children.
-        const ulz = SphinxToTr.children(li, 'ul')
+        const ulz = SphinxToTr.childrenByName(li, 'ul')
         if (ulz.length > 1)
           throw new Error(`found ${ulz.length} <ul/> elements in TOC entry ${li.outerHTML}`)
         if (ulz.length === 1)
@@ -92,10 +93,60 @@ class SphinxToTr {
     }
   }
 
+
+  async updateFrontMatter (
+    // Config strcuture for a W3C Respec doc
+    respecConfig,
+
+    // CSS selector for root of TOC
+    selector = '[role=main] > div',
+
+    // Sphinx index page
+    page = this.startPage
+  ) {
+    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
+
+    if (typeof respecConfig === 'string') {
+      const text = Fs.readFileSync(respecConfig, 'utf-8')
+      respecConfig = respecConfig.endsWith('yaml')
+        ? Yaml.load(text)
+        : JSON.parse(text)
+    }
+    console.log(respecConfig)
+
+    let date = new Date()
+    const pubDate = new Date().toLocaleString('en-US', { dateStyle: 'medium' })
+    const [block] = find(selector)
+    SphinxToTr.childrenByClass(block, 'line-block').forEach( (line) => {
+      const d1 = new Date(line.textContent)
+      if (d1 !== 'Invalid Date')
+        date = d1.toLocaleString('en-US', { dateStyle: 'medium' })
+      line.remove()
+    })
+    const time = document.createElement('time')
+    time.setAttribute('datetime', pubDate)
+    time.classList.add('dt-updated')
+    const span = document.createElement('span')
+    span.textContent = 'W3C Working Draft'
+    span.append(time)
+
+    const h1 = SphinxToTr.childrenByName(block, 'h1')[0]
+    h1.classList.add('p-name', 'no-ref')
+    h1.id = 'title'
+    const h2 = document.createElement('h2')
+    h2.append(span)
+    h2.id = 'profile-and-date'
+    block.insertBefore(h2, h1.nextElementSibling)
+
+    console.log(block.outerHTML)
+  }
+
   /** copyRecursively - Recursively copy each referenced doc
+   * @returns - i dunno, but it's not useful yet.
    */
   async copyRecursively (
     numberedSections,
+    outDir,
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
@@ -110,7 +161,7 @@ class SphinxToTr {
 
     // add section numbers to sidebar
     const az = SphinxToTr.localHrefs(find('[role=navigation] a'), dir)
-    return await Promise.all(az.reduce((acc, [relUrl, a]) => {
+    const ret = await Promise.all(az.reduce((acc, [relUrl, a]) => {
       if (!numberedSections.has(relUrl)) {
         // console.warn(`skipping un-numbered reference in ${a.outerHTML}`)
         return acc
@@ -123,22 +174,32 @@ class SphinxToTr {
 
       if (!seen.has(relUrl)) {
         seen.add(relUrl)
-        acc.push(this.copyRecursively(numberedSections, relUrl, seen))
+        acc.push(this.copyRecursively(numberedSections, outDir, relUrl, seen))
       }
 
       return acc
     }, []))
-  }
 
-  static span (document, text, classes) {
-    const span = document.createElement('span')
-    span.textContent = text
-    classes.forEach( (c) => span.classList.add(c) )
-    return span
+    // write out the file
+    const outFilePath = Path.join(outDir, page)
+    Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
+    const text = document.documentElement.outerHTML
+    Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
+    console.log(`${outFilePath}: ${text.length} chars`)
+
+    return ret
+
+    function ensureDirectoryExistence(filePath) {
+      var dirname = Path.dirname(filePath);
+      if (Fs.existsSync(dirname)) {
+        return true;
+      }
+      ensureDirectoryExistence(dirname);
+      Fs.mkdirSync(dirname);
+    }
   }
 
   /**
-   * @returns - i dunno, but it's not useful yet.
    */
   async loadPage (page, timeout) {
     if (this.pageCache.has(page))
@@ -200,6 +261,16 @@ class SphinxToTr {
 
   }
 
+  // Static helpers
+
+  // Create a span element with given text and classes
+  static span (document, text, classes) {
+    const span = document.createElement('span')
+    span.textContent = text
+    classes.forEach( (c) => span.classList.add(c) )
+    return span
+  }
+
   static addNumber (document, a, secNo, linkText) {
     if (linkText) {
       if (linkText !== a.textContent)
@@ -232,8 +303,12 @@ class SphinxToTr {
   // :scope and I don't know how to find Element.prototype
   // needed for <https://stackoverflow.com/a/17989803/1243605>.
   // const az = find(':scope > a', li)
-  static children (parent, localName) {
+  static childrenByName (parent, localName) {
     return [...parent.children].filter( (elt) => elt.localName === localName )
+  }
+
+  static childrenByClass (parent, cls) {
+    return [...parent.children].filter( (elt) => elt.classList.contains(cls) )
   }
 }
 
