@@ -1,12 +1,12 @@
 "use strict"
 
-const Fs = require('fs')
-const Path = require('path')
-const Jsdom = require("jsdom")
-const { InitializedSet, ArrayMap, TableOfContents } = require('./lib/containers')
-const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
+import * as Fs from 'fs'
+import * as Path from 'path'
+import * as Jsdom from 'jsdom'
+import { InitializedSet, ArrayMap, TableOfContents } from './lib/containers.mjs'
+import * as ChattyResourceLoader from './lib/ChattyResourceLoader.mjs'
 const { JSDOM } = Jsdom
-const { toHTML, write } = require("respec/tools/respecDocWriter.js");
+import { toHTML, write } from 'respec/tools/respecDocWriter.js';
 
 // How long to wait for a doc to load. Increase when using WAIT_FOR.
 const LOAD_TIMEOUT = 1000
@@ -22,7 +22,7 @@ const CHATTY_LOADER = false
 /** Working class to translate Sphinx docs to W3C TR/ format
  * This manipulates a set of included resources starting from this.relDir.
  */
-class SphinxToTr {
+export default class SphinxToTr {
   constructor (path) {
     const parsed = Path.parse(path)
 
@@ -287,7 +287,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
   /** calculate location info for page relative to this.relDir
    */
   findIncludedResource (page) {
-    const path = Path.join(__dirname, this.relDir, page)
+    const path = Path.join(new URL('.', import.meta.url).pathname, this.relDir, page)
     const url = new URL('file://' + path)
     const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
     return { path, url, dir }
@@ -404,4 +404,3 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
   }
 }
 
-module.exports = SphinxToTr

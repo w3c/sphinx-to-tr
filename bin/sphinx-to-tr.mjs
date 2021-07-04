@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 "use strict"
 
-const SphinxToTr = require('../SphinxToTr');
-const Logger = require('../lib/RespecLogger');
+import SphinxToTr from '../SphinxToTr.mjs';
+import Logger from '../lib/RespecLogger.js';
 
 const DefaultOptions = {
   "timeout": 10,

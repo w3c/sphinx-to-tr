@@ -2,12 +2,12 @@
   "name": "sphinx-to-tr",
   "version": "0.0.1",
   "description": "transform Sphinx doc (e.g. <https://webassembly.github.io/spec/core/index.html>) to <http://www.w3.org/TR/>",
-  "main": "SphinxToTr.js",
+  "main": "SphinxToTr.mjs",
   "bin": [
     "bin/sphinx-to-tr"
   ],
   "scripts": {
-    "wasm": "./bin/sphinx-to-tr ../../webassembly/spec/core/index.html wasm-respec.html out Appendix",
+    "wasm": "node ./bin/sphinx-to-tr.mjs ../../webassembly/spec/core/index.html wasm-respec.html out Appendix",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
