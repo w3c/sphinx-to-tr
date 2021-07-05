@@ -150,7 +150,8 @@ class SphinxToTr {
         // await SphinxToTr.domContentLoaded(dom, respecOptions.timeout, url)
 
         steal('head > meta[charset]')
-        const generator = steal('head > meta[name=generator]', outHead)
+        const generator = steal('head > meta[name=generator]', false)
+        outHead.prepend(generator)
         generator.setAttribute('content', 'sphinx-to-tr @@0.0.0, ' + generator.getAttribute('content'))
         steal('head > meta[name=viewport]')
         steal('head > title')
@@ -161,15 +162,17 @@ class SphinxToTr {
         })
       }
 
-      const outBody = find('body')[0]
+      // grab the W3C-stylized Table of Contents
+      const newToc = steal('[id=toc]', false)
+
       // replace sphinx sidebar TOC with more complete one
       {
-        const searchbox = find('#searchbox')[0]
+        const searchBox = find('#searchbox')[0]
         // needs <script>$('#searchbox').show(0);</script>
-        const sphinxGenerated = searchbox.previousElementSibling
-        console.log(searchbox, sphinxGenerated)
+        const searchScript = searchBox.nextElementSibling
+        const sphinxGenerated = searchBox.previousElementSibling
+        console.log(searchBox, sphinxGenerated)
         find('[role=navigation]')[0].remove()
-        const newToc = steal('[id=toc]', outBody)
         const newTocOl = SphinxToTr.childrenByClass(newToc, 'toc')[0]
         newTocOl.textContent = '' // clear out dummy entry
         const bodyToc = find('.toctree-wrapper > ul > li')
@@ -179,10 +182,15 @@ class SphinxToTr {
           newTocOl.append(li)
         })
         newToc.setAttribute('role', 'navigation')
+        newToc.append(sphinxGenerated)
+        newToc.append(searchBox)
+        newToc.append(searchScript)
       }
 
       // copy respec <body/>
       {
+        const body = steal('body')
+        body.append(newToc)
       }
 
       function adopt (elt) {
@@ -191,16 +199,13 @@ class SphinxToTr {
         return ret
       }
 
-      function steal (selector, inventHere) {
+      function steal (selector, replace = true) {
         const src = one(respec.find, 'source', 1)
         const copy = adopt(src)
         src.remove()
-        const target = one(find, 'target', inventHere ? 0 : 1)
-        if (inventHere) {
-          inventHere.append(copy)
-        } else {
+        const target = one(find, 'target', replace ? 1 : 0)
+        if (replace)
           target.replaceWith(copy)
-        }
         return copy
 
         function one (finder, label, expectCount) {
