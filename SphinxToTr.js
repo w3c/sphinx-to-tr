@@ -2,11 +2,11 @@
 
 const Fs = require('fs')
 const Path = require('path')
-const Yaml = require('js-yaml')
 const Jsdom = require("jsdom")
 const { InitializedSet, ArrayMap } = require('./lib/containers')
 const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
 const { JSDOM } = Jsdom
+const { toHTML, write } = require("respec/tools/respecDocWriter.js");
 
 // How long to wait for a doc to load. Increase when using WAIT_FOR.
 const LOAD_TIMEOUT = 1000
@@ -62,6 +62,7 @@ class SphinxToTr {
       numberableSections.forEach( (li, idx) => {
         const secNo = leader + (idx + 1)
 
+        li.className = 'tocline'
         const az = SphinxToTr.childrenByName(li, 'a')
         if (az.length !== 1)
           throw new Error(`found ${az.length} <a/> elements in TOC entry ${li.outerHTML}`)
@@ -93,10 +94,9 @@ class SphinxToTr {
     }
   }
 
-
   async updateFrontMatter (
-    // Config strcuture for a W3C Respec doc
-    respecConfig,
+    // W3C Respec doc from which to steal front matter
+    respecSrc, respecOptions,
 
     // CSS selector for root of TOC
     selector = '[role=main] > div',
@@ -105,15 +105,7 @@ class SphinxToTr {
     page = this.startPage
   ) {
     const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
-
-    if (typeof respecConfig === 'string') {
-      const text = Fs.readFileSync(respecConfig, 'utf-8')
-      respecConfig = respecConfig.endsWith('yaml')
-        ? Yaml.load(text)
-        : JSON.parse(text)
-    }
-    console.log(respecConfig)
-
+/*
     let date = new Date()
     const pubDate = new Date().toLocaleString('en-US', { dateStyle: 'medium' })
     const [block] = find(selector)
@@ -137,8 +129,97 @@ class SphinxToTr {
     h2.append(span)
     h2.id = 'profile-and-date'
     block.insertBefore(h2, h1.nextElementSibling)
+*/
+    // globalThis.window = dom.window
+    try {
+      const { html, errors, warnings } = await toHTML(respecSrc, respecOptions);
+      warnings.forEach( (w) => console.warn(w) )
+      if (errors.length)
+        throw Error(`respec.toHTML returned ${errors.length} errors: ${errors.join('\n')}`)
 
-    console.log(block.outerHTML)
+      const respec = {
+        dom: new JSDOM(html, { url: respecSrc }),
+      }
+      respec.doc = respec.dom.window.document
+      respec.find = SphinxToTr.makeFind(respec.doc)
+
+      // copy respec <head/>
+      {
+        const respecHead = respec.find('head')[0]
+        const outHead = find('head')[0]
+        // await SphinxToTr.domContentLoaded(dom, respecOptions.timeout, url)
+
+        steal('head > meta[charset]')
+        const generator = steal('head > meta[name=generator]', outHead)
+        generator.setAttribute('content', 'sphinx-to-tr @@0.0.0, ' + generator.getAttribute('content'))
+        steal('head > meta[name=viewport]')
+        steal('head > title')
+        const remainingRespecElts = [...respecHead.children]
+        remainingRespecElts.forEach( (elt) => {
+          const copy = adopt(elt)
+          outHead.append(copy)
+        })
+      }
+
+      const outBody = find('body')[0]
+      // replace sphinx sidebar TOC with more complete one
+      {
+        const searchbox = find('#searchbox')[0]
+        // needs <script>$('#searchbox').show(0);</script>
+        const sphinxGenerated = searchbox.previousElementSibling
+        console.log(searchbox, sphinxGenerated)
+        find('[role=navigation]')[0].remove()
+        const newToc = steal('[id=toc]', outBody)
+        const newTocOl = SphinxToTr.childrenByClass(newToc, 'toc')[0]
+        newTocOl.textContent = '' // clear out dummy entry
+        const bodyToc = find('.toctree-wrapper > ul > li')
+        const simpleToc = find('.simple > li');
+        ([...bodyToc]).concat([...simpleToc]).forEach( (li) => {
+          li.remove()
+          newTocOl.append(li)
+        })
+        newToc.setAttribute('role', 'navigation')
+      }
+
+      // copy respec <body/>
+      {
+      }
+
+      function adopt (elt) {
+        const ret = elt.cloneNode(true)
+        document.adoptNode(ret)
+        return ret
+      }
+
+      function steal (selector, inventHere) {
+        const src = one(respec.find, 'source', 1)
+        const copy = adopt(src)
+        src.remove()
+        const target = one(find, 'target', inventHere ? 0 : 1)
+        if (inventHere) {
+          inventHere.append(copy)
+        } else {
+          target.replaceWith(copy)
+        }
+        return copy
+
+        function one (finder, label, expectCount) {
+          const ret = finder(selector)
+          if (ret.length !== expectCount)
+            throw new Error(`replacing ${selector}, expected 1 match in ${label}, got [${
+ret.map( (elt) => elt.outerHTML ).join(',\n')
+}]`)
+          return ret[0]
+        }
+      }
+
+      // require = require("esm")(module/*, options*/)
+      // const W3cProfile = import('./respec/builds/respec-w3c.js') // ('./respec/src/core/base-runner.js') // ('./respec/profiles/w3c')
+      // console.log('W3cProfile:', W3cProfile);
+    } catch (e) {
+      console.log('updateFrontMatter:', e)
+      process.exit(-1)
+    }
   }
 
   /** copyRecursively - Recursively copy each referenced doc
@@ -169,7 +250,8 @@ class SphinxToTr {
       const entry = numberedSections.get(relUrl)
 
       // Renumber index entry.
-      SphinxToTr.addNumber(document, a, entry.secNo, entry.linkText)
+      if (SphinxToTr.childrenByClass(a, 'secno').length === 0) // not yet numbered
+        SphinxToTr.addNumber(document, a, entry.secNo, entry.linkText)
       acc.push(Promise.resolve({page, relUrl, entry}))
 
       if (!seen.has(relUrl)) {
@@ -218,14 +300,32 @@ class SphinxToTr {
         ? new ChattyResourceLoader()
         : "usable",
     } : {}))
-    const document = dom.window.document
-
     // work around bug in MathJax appVersion parser
     // dom.window.navigator.appVersion = dom.window.navigator.userAgent
 
+    await SphinxToTr.domContentLoaded(dom, timeout, page)
+
+    this.waitFor.forEach( (wf) => {
+      if (!(wf in dom.window))
+        throw new Error(`${wf} failed to load`)
+    })
+
+    const document = dom.window.document
+    const find = SphinxToTr.makeFind(document)
+
+    // cache and return
+    const ret = { dom, path, url, dir, document, find }
+    this.pageCache.set(page, ret)
+    return ret
+
+  }
+
+  // Static helpers
+
+  static domContentLoaded (dom, timeout) {
     // Load the page with a timeout
     let timer = null;
-    await Promise.race([
+    return Promise.race([
       new Promise((res, rej) => {
         timer = setTimeout(() => {
           timer = null
@@ -243,25 +343,15 @@ class SphinxToTr {
         })
       })
     ])
+  }
 
-    this.waitFor.forEach( (wf) => {
-      if (!(wf in dom.window))
-        throw new Error(`${wf} failed to load`)
-    })
-
-    // convenience function find to query DOM
+  // convenience function find to query DOM
+  static makeFind (document) {
     const find =
           // (selectors, from) => (from ? dom.window.$(from).find(selectors) : dom.window.$(selectors)).get() // jQuery
           (selectors, from) => [...(from || document).querySelectorAll(selectors)] // DOM
-
-    // cache and return
-    const ret = { dom, path, url, dir, document, find }
-    this.pageCache.set(page, ret)
-    return ret
-
+    return find
   }
-
-  // Static helpers
 
   // Create a span element with given text and classes
   static span (document, text, classes) {
@@ -282,6 +372,7 @@ class SphinxToTr {
     a.appendChild(SphinxToTr.span(document, secNo, ['secno']))
     a.appendChild(document.createTextNode(' '))
     a.appendChild(SphinxToTr.span(document, linkText, ['content']))
+    a.className = 'toxref'
     return linkText
   }
 

@@ -7,7 +7,7 @@
     "bin/sphinx-to-tr"
   ],
   "scripts": {
-    "wasm": "./bin/sphinx-to-tr ../../webassembly/spec/core/index.html respecConfig.yaml out Appendix",
+    "wasm": "./bin/sphinx-to-tr ../../webassembly/spec/core/index.html wasm-respec.html out Appendix",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -32,6 +32,6 @@
   "dependencies": {
     "js-yaml": "^4.1.0",
     "jsdom": "^16.6.0",
-    "respec": "^26.9.0"
+    "respec": "^26.9.1"
   }
 }
