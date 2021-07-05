@@ -162,22 +162,23 @@ class SphinxToTr {
         })
       }
 
-      // grab the W3C-stylized Table of Contents
-      const newToc = steal('[id=toc]', false)
+      // grab elements we want to keep from the sphinx page
+      const searchBox = find('#searchbox')[0]
+      const searchScript = searchBox.nextElementSibling
+      const sphinxGenerated = searchBox.previousElementSibling
+      const immediateLis = ([...find('.toctree-wrapper > ul > li')])
+            .concat([...find('.simple > li')])
 
-      // replace sphinx sidebar TOC with more complete one
+      // copy respec <body/>
+      const body = steal('body')
+      // console.log(body.outerHTML)
+      const newToc = find('[id=toc]')[0]
+
+      // replace sphinx sidebar TOC with more complete one from the main page
       {
-        const searchBox = find('#searchbox')[0]
-        // needs <script>$('#searchbox').show(0);</script>
-        const searchScript = searchBox.nextElementSibling
-        const sphinxGenerated = searchBox.previousElementSibling
-        console.log(searchBox, sphinxGenerated)
-        find('[role=navigation]')[0].remove()
         const newTocOl = SphinxToTr.childrenByClass(newToc, 'toc')[0]
         newTocOl.textContent = '' // clear out dummy entry
-        const bodyToc = find('.toctree-wrapper > ul > li')
-        const simpleToc = find('.simple > li');
-        ([...bodyToc]).concat([...simpleToc]).forEach( (li) => {
+        immediateLis.forEach( (li) => {
           li.remove()
           newTocOl.append(li)
         })
@@ -185,12 +186,6 @@ class SphinxToTr {
         newToc.append(sphinxGenerated)
         newToc.append(searchBox)
         newToc.append(searchScript)
-      }
-
-      // copy respec <body/>
-      {
-        const body = steal('body')
-        body.append(newToc)
       }
 
       function adopt (elt) {
