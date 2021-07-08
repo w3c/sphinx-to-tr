@@ -239,14 +239,19 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
 
       // remove old sidebar
       az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
-      oldNavs[0].remove()
+      oldNavs[0].remove();
 
+      /*
       const urlStrToElements =
             SphinxToTr.localHrefs(find('a'), dir)
             .reduce( (acc, [urlStr, elt]) => acc.set(urlStr, elt), new ArrayMap())
       urlStrToElements.delete('')
-      console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`)
-      urlStrToElements.forEach( ([relStr, a]) => toc.updateAnchor(a, relStr) )
+      console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`);
+      */
+
+      [...find('a.headerlink')].forEach( (a) => toc.updateAnchor(document, a, page) )
+
+      // add the TOC
       find('body')[0].prepend(toc.getHtml(document, page))
 
       const lastStyleSheet = document.createElement('link')
