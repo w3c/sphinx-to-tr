@@ -75,7 +75,6 @@ class SphinxToTr {
         return await Promise.all(numberableSections.map( async (li, idx) => {
           const secNo = leader + (idx + 1)
 
-          li.className = 'tocline'
           const az = SphinxToTr.childrenByName(li, 'a')
           if (az.length !== 1)
             throw new Error(`found ${az.length} <a/> elements in TOC entry ${li.outerHTML}`)
@@ -113,8 +112,6 @@ class SphinxToTr {
             return ret.add(secNo, linkText, relStr, nested)
           }
         }))
-
-        // Don't bother writing; sidebar renumbering will write out all changes.
       }
     }
   }
@@ -187,6 +184,8 @@ class SphinxToTr {
         newToc.append(searchScript)
       }
 
+      // Don't bother writing; `copyRecursively` will write out all changes.
+
       return headMatter
 
       function steal (selector, replace = true) {
@@ -207,10 +206,6 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
           return ret[0]
         }
       }
-
-      // require = require("esm")(module/*, options*/)
-      // const W3cProfile = import('./respec/builds/respec-w3c.js') // ('./respec/src/core/base-runner.js') // ('./respec/profiles/w3c')
-      // console.log('W3cProfile:', W3cProfile);
     } catch (e) {
       console.error('updateFrontMatter:', e)
       process.exit(-1)
