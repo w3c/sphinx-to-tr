@@ -119,6 +119,9 @@ class SphinxToTr {
     }
   }
 
+  /**
+   * @returns: elements to append to <head/>
+   */
   async updateFrontMatter (
     // W3C Respec doc from which to steal front matter
     respecSrc, respecOptions,
@@ -144,8 +147,8 @@ class SphinxToTr {
       respec.find = SphinxToTr.makeFind(respec.doc)
 
       // copy respec <head/>
+      const respecHead = respec.find('head')[0]
       {
-        const respecHead = respec.find('head')[0]
         const outHead = find('head')[0]
         // await SphinxToTr.domContentLoaded(dom, respecOptions.timeout, url)
 
@@ -155,12 +158,8 @@ class SphinxToTr {
         generator.setAttribute('content', 'sphinx-to-tr @@0.0.0, ' + generator.getAttribute('content'))
         steal('head > meta[name=viewport]')
         steal('head > title')
-        const remainingRespecElts = [...respecHead.children]
-        remainingRespecElts.forEach( (elt) => {
-          const copy = SphinxToTr.adopt(document, elt)
-          outHead.append(copy)
-        })
       }
+      const headMatter = [...respecHead.children]
 
       // grab elements we want to keep from the sphinx page
       const searchBox = find('#searchbox')[0]
@@ -187,6 +186,8 @@ class SphinxToTr {
         newToc.append(searchBox)
         newToc.append(searchScript)
       }
+
+      return headMatter
 
       function steal (selector, replace = true) {
         const src = one(respec.find, 'source', 1)
@@ -220,6 +221,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
    * @returns - i dunno, but it's not useful yet.
    */
   async copyRecursively (
+    headMatter,
     toc,
     outDir,
     page = this.startPage,
@@ -231,6 +233,15 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     let az = []
 
     if (oldNavs.length === 1 || oldNavs.length === 2) { // back to top link
+
+      // transplant headMatter into <head/>
+      {
+        const outHead = find('head')[0]
+        headMatter.forEach( (elt) => {
+          const copy = SphinxToTr.adopt(document, elt)
+          outHead.append(copy)
+        })
+      }
 
       // remove old sidebar
       az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
@@ -261,7 +272,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       if (seen.has(relUrl))
         return acc
       seen.add(relUrl)
-      return acc.concat(this.copyRecursively(toc, outDir, relUrl, seen))
+      return acc.concat(this.copyRecursively(headMatter, toc, outDir, relUrl, seen))
     }, []))
 
     return {page, visited}
