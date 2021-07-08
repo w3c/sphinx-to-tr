@@ -3,7 +3,7 @@
 const Fs = require('fs')
 const Path = require('path')
 const Jsdom = require("jsdom")
-const { InitializedSet, ArrayMap, Toc } = require('./lib/containers')
+const { InitializedSet, ArrayMap, TableOfContents } = require('./lib/containers')
 const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
 const { JSDOM } = Jsdom
 const { toHTML, write } = require("respec/tools/respecDocWriter.js");
@@ -54,11 +54,10 @@ class SphinxToTr {
 
   ) {
     const self = this
-    const fakeDoc = new JSDOM('<html><body></body></html>', {url: 'http://a.example/'}).window.document
 
     // Map to return
-    const ret = new Toc(fakeDoc);
-    (await visitPage(page, leader)).forEach( (li) => ret.root.append(li) )
+    const ret = new TableOfContents();
+    (await visitPage(page, leader)).forEach( (li) => ret.add(li) )
     return ret
 
     async function visitPage (page, leader) {
@@ -89,7 +88,7 @@ class SphinxToTr {
 
           // Return if this is an un-numbered TOC entry.
           if (appendixLabels.indexOf(a.textContent) !== -1) {
-            return ret.add(null, linkText, relStr, [])
+            return ret.makeEntry(null, linkText, relStr, [])
           } else {
 
             // Renumber nested children.
@@ -109,7 +108,7 @@ class SphinxToTr {
                   : null
 
             // Record name of this TOC entry.
-            return ret.add(secNo, linkText, relStr, nested)
+            return ret.makeEntry(secNo, linkText, relStr, nested)
           }
         }))
       }
@@ -248,7 +247,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       urlStrToElements.delete('')
       console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`)
       urlStrToElements.forEach( ([relStr, a]) => toc.updateAnchor(a, relStr) )
-      find('body')[0].prepend(toc.get(page))
+      find('body')[0].prepend(toc.getHtml(document, page))
 
       const lastStyleSheet = document.createElement('link')
       lastStyleSheet.setAttribute('rel', 'stylesheet')
