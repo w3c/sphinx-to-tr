@@ -21,10 +21,11 @@ async function run (opts) {
 ${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1)
   }
   try {
+    const [indexPath, respecFile, outDir, ...unnumberedLinkText] = process.argv.slice(2)
     const log = new Logger(opts.verbose);
-    const translator = new SphinxToTr(process.argv[2])
-    const index = await translator.indexPage(process.argv.slice(5))
-    await translator.updateFrontMatter(new URL(process.argv[3], `file://${process.cwd()}/`).href, {
+    const translator = new SphinxToTr(indexPath)
+    const toc = await translator.indexPage(unnumberedLinkText)
+    const headMatter = await translator.updateFrontMatter(new URL(respecFile, `file://${process.cwd()}/`).href, {
         timeout: opts.timeout * 1000,
         useLocal: opts["use-local"],
         onError: log.error.bind(log),
@@ -33,7 +34,7 @@ ${exe} ../../webassembly/spec/core/index.html 'Appendix' 'another Appendix'`, -1
         disableSandbox: opts["disable-sandbox"],
         devtools: opts.devtools,
       })
-    const copied = await translator.copyRecursively(index, process.argv[4])
+    const copied = await translator.copyRecursively(headMatter, toc, outDir)
     // console.log(JSON.stringify(copied, null, 2))
   } catch (e) {
     fail(e, -1)

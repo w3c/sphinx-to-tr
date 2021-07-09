@@ -3,7 +3,7 @@
 const Fs = require('fs')
 const Path = require('path')
 const Jsdom = require("jsdom")
-const { InitializedSet, ArrayMap } = require('./lib/containers')
+const { InitializedSet, ArrayMap, TableOfContents } = require('./lib/containers')
 const ChattyResourceLoader = require('./lib/ChattyResourceLoader')
 const { JSDOM } = Jsdom
 const { toHTML, write } = require("respec/tools/respecDocWriter.js");
@@ -19,7 +19,9 @@ const WAIT_FOR = [] // ['$']
 // Debug by showing what pages are being loaded.
 const CHATTY_LOADER = false
 
-// Working class to translate Sphinx docs to W3C TR/ format
+/** Working class to translate Sphinx docs to W3C TR/ format
+ * This manipulates a set of included resources starting from this.relDir.
+ */
 class SphinxToTr {
   constructor (path) {
     const parsed = Path.parse(path)
@@ -38,6 +40,7 @@ class SphinxToTr {
   }
 
   /** indexPage - Crawl through sphinx index page to number sections
+   * called on page index.html, it will recurse through *\/index.html
    */
   async indexPage (
     // Which labels should not get numbers
@@ -47,53 +50,74 @@ class SphinxToTr {
     selector = '.toctree-wrapper',
 
     // Sphinx index page
-    page = this.startPage
-  ) {
-    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
+    page = this.startPage,
 
-    const [primaryToc] = find(selector + ' > ul') // sphinx seems to have three unclassed <ul/>s
-    const ret = new Map()
-    visit(primaryToc, '')
+    // Leader text for section
+    leader = '',
+
+  ) {
+    const self = this
+
+    // Map to return
+    const ret = new TableOfContents();
+    (await visitPage(page, leader)).forEach( (li) => ret.add(li) )
     return ret
 
-    function visit (ul, leader) {
-      const numberableSections = SphinxToTr.childrenByName(ul, 'li')
-            .filter( (elt) => appendixLabels.indexOf(elt.textContent) === -1 )
-      numberableSections.forEach( (li, idx) => {
-        const secNo = leader + (idx + 1)
+    async function visitPage (page, leader) {
+      const { dom, document, url, dir, find } = await self.loadPageDom(page, LOAD_TIMEOUT)
 
-        li.className = 'tocline'
-        const az = SphinxToTr.childrenByName(li, 'a')
-        if (az.length !== 1)
-          throw new Error(`found ${az.length} <a/> elements in TOC entry ${li.outerHTML}`)
-        const a = az[0]
-        const urlStr = a.href
-        if (!(urlStr.startsWith(dir)))
-          throw new Error(`apparent href to doc outside TR/ tree <${urlStr}> in  ${li.outerHTML}`)
-        const relStr = urlStr.substr(dir.length)
+      const tocs = find(selector + ' > ul')
+      return tocs.length === 0
+        ? []
+        : await visitUl(tocs[0], leader) // sphinx seems to have three unclassed <ul/>s; visit 1st
 
-        // Return if this is an un-numbered TOC entry.
-        if (appendixLabels.indexOf(a.textContent) !== -1)
-          return
+      async function visitUl (ul, leader) {
+        const numberableSections = SphinxToTr.childrenByName(ul, 'li')
+              .filter( (elt) => appendixLabels.indexOf(elt.textContent) === -1 )
+        return await Promise.all(numberableSections.map( async (li, idx) => {
+          const secNo = leader + (idx + 1)
 
-        // Renumber index entry.
-        const linkText = SphinxToTr.addNumber(document, a, secNo, null)
+          const az = SphinxToTr.childrenByName(li, 'a')
+          if (az.length !== 1)
+            throw new Error(`found ${az.length} <a/> elements in TOC entry ${li.outerHTML}`)
+          const a = az[0]
+          const urlStr = a.href
+          if (!(urlStr.startsWith(dir)))
+            throw new Error(`apparent href to doc outside TR/ tree <${urlStr}> in  ${li.outerHTML}`)
+          const relStr = urlStr.substr(dir.length)
 
-        // Record name of this TOC entry.
-        ret.set(relStr, { elt: li, secNo, linkText })
+          // Renumber index entry.
+          const linkText = a.textContent
 
-        // Don't bother writing; sidebar renumbering will write out all changes.
+          // Return if this is an un-numbered TOC entry.
+          if (appendixLabels.indexOf(a.textContent) !== -1) {
+            return ret.makeEntry(null, linkText, relStr, [])
+          } else {
 
-        // Renumber nested children.
-        const ulz = SphinxToTr.childrenByName(li, 'ul')
-        if (ulz.length > 1)
-          throw new Error(`found ${ulz.length} <ul/> elements in TOC entry ${li.outerHTML}`)
-        if (ulz.length === 1)
-          visit(ulz[0], secNo + '.')
-      })
+            // Renumber nested children.
+            const ulz = SphinxToTr.childrenByName(li, 'ul')
+            if (ulz.length > 1)
+              throw new Error(`found ${ulz.length} <ul/> elements in TOC entry ${li.outerHTML}`)
+
+            const nested = (urlStr.startsWith(dir) && urlStr.endsWith('index.html'))
+                  // index pages have detailed TOCs and take precedence over embeded <ul/>s.
+                  ? await visitPage(urlStr.substr(dir.length), secNo + '.')
+                  // a <ul/> contains nested TOC entries on this page.
+                  : (ulz.length === 1)
+                  ? await visitUl(ulz[0], secNo + '.')
+                  : null
+
+            // Record name of this TOC entry.
+            return ret.makeEntry(secNo, linkText, relStr, nested)
+          }
+        }))
+      }
     }
   }
 
+  /**
+   * @returns: elements to append to <head/>
+   */
   async updateFrontMatter (
     // W3C Respec doc from which to steal front matter
     respecSrc, respecOptions,
@@ -104,32 +128,7 @@ class SphinxToTr {
     // Sphinx index page
     page = this.startPage
   ) {
-    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
-/*
-    let date = new Date()
-    const pubDate = new Date().toLocaleString('en-US', { dateStyle: 'medium' })
-    const [block] = find(selector)
-    SphinxToTr.childrenByClass(block, 'line-block').forEach( (line) => {
-      const d1 = new Date(line.textContent)
-      if (d1 !== 'Invalid Date')
-        date = d1.toLocaleString('en-US', { dateStyle: 'medium' })
-      line.remove()
-    })
-    const time = document.createElement('time')
-    time.setAttribute('datetime', pubDate)
-    time.classList.add('dt-updated')
-    const span = document.createElement('span')
-    span.textContent = 'W3C Working Draft'
-    span.append(time)
-
-    const h1 = SphinxToTr.childrenByName(block, 'h1')[0]
-    h1.classList.add('p-name', 'no-ref')
-    h1.id = 'title'
-    const h2 = document.createElement('h2')
-    h2.append(span)
-    h2.id = 'profile-and-date'
-    block.insertBefore(h2, h1.nextElementSibling)
-*/
+    const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
     // globalThis.window = dom.window
     try {
       const { html, errors, warnings } = await toHTML(respecSrc, respecOptions);
@@ -144,8 +143,8 @@ class SphinxToTr {
       respec.find = SphinxToTr.makeFind(respec.doc)
 
       // copy respec <head/>
+      const respecHead = respec.find('head')[0]
       {
-        const respecHead = respec.find('head')[0]
         const outHead = find('head')[0]
         // await SphinxToTr.domContentLoaded(dom, respecOptions.timeout, url)
 
@@ -155,12 +154,8 @@ class SphinxToTr {
         generator.setAttribute('content', 'sphinx-to-tr @@0.0.0, ' + generator.getAttribute('content'))
         steal('head > meta[name=viewport]')
         steal('head > title')
-        const remainingRespecElts = [...respecHead.children]
-        remainingRespecElts.forEach( (elt) => {
-          const copy = adopt(elt)
-          outHead.append(copy)
-        })
       }
+      const headMatter = [...respecHead.children]
 
       // grab elements we want to keep from the sphinx page
       const searchBox = find('#searchbox')[0]
@@ -188,15 +183,13 @@ class SphinxToTr {
         newToc.append(searchScript)
       }
 
-      function adopt (elt) {
-        const ret = elt.cloneNode(true)
-        document.adoptNode(ret)
-        return ret
-      }
+      // Don't bother writing; `copyRecursively` will write out all changes.
+
+      return headMatter
 
       function steal (selector, replace = true) {
         const src = one(respec.find, 'source', 1)
-        const copy = adopt(src)
+        const copy = SphinxToTr.adopt(document, src)
         src.remove()
         const target = one(find, 'target', replace ? 1 : 0)
         if (replace)
@@ -212,12 +205,8 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
           return ret[0]
         }
       }
-
-      // require = require("esm")(module/*, options*/)
-      // const W3cProfile = import('./respec/builds/respec-w3c.js') // ('./respec/src/core/base-runner.js') // ('./respec/profiles/w3c')
-      // console.log('W3cProfile:', W3cProfile);
     } catch (e) {
-      console.log('updateFrontMatter:', e)
+      console.error('updateFrontMatter:', e)
       process.exit(-1)
     }
   }
@@ -226,50 +215,67 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
    * @returns - i dunno, but it's not useful yet.
    */
   async copyRecursively (
-    numberedSections,
+    headMatter,
+    toc,
     outDir,
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
-    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
-
-    // List all hrefs just as an FYI.
-    const urlStrToElements =
-          SphinxToTr.localHrefs(find('a'), dir)
-          .reduce( (acc, [urlStr, elt]) => acc.set(urlStr, elt), new ArrayMap())
-    urlStrToElements.delete('')
-    console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`)
-
-    // add section numbers to sidebar
-    const az = SphinxToTr.localHrefs(find('[role=navigation] a'), dir)
-    const ret = await Promise.all(az.reduce((acc, [relUrl, a]) => {
-      if (!numberedSections.has(relUrl)) {
-        // console.warn(`skipping un-numbered reference in ${a.outerHTML}`)
-        return acc
-      }
-      const entry = numberedSections.get(relUrl)
-
-      // Renumber index entry.
-      if (SphinxToTr.childrenByClass(a, 'secno').length === 0) // not yet numbered
-        SphinxToTr.addNumber(document, a, entry.secNo, entry.linkText)
-      acc.push(Promise.resolve({page, relUrl, entry}))
-
-      if (!seen.has(relUrl)) {
-        seen.add(relUrl)
-        acc.push(this.copyRecursively(numberedSections, outDir, relUrl, seen))
-      }
-
-      return acc
-    }, []))
-
-    // write out the file
     const outFilePath = Path.join(outDir, page)
     Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
+
+    // early return for non-HTML files
+    if (!page.endsWith('.html')) {
+      const buf = Fs.readFileSync(this.findIncludedResource(page).path)
+      Fs.writeFileSync(outFilePath, buf)
+      console.log(`${outFilePath}: ${buf.length} bytes`)
+      return { page, visisted: [] }
+    }
+
+    const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
+    // div class="sphinxsidebar" role="navigation" aria-label="main navigation"
+    const oldNavs = find('[role=navigation]') // [id=toc]
+    let az = []
+      az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
+
+    if (oldNavs.length === 1 || oldNavs.length === 2) { // back to top link
+
+      // transplant headMatter into <head/>
+      {
+        const outHead = find('head')[0]
+        headMatter.forEach( (elt) => {
+          const copy = SphinxToTr.adopt(document, elt)
+          outHead.append(copy)
+        })
+      }
+
+      // remove old sidebar
+      oldNavs[0].remove();
+
+      [...find('a.headerlink')].forEach( (a) => toc.updateAnchor(document, a, page) )
+
+      // add the TOC
+      find('body')[0].prepend(toc.getHtml(document, page))
+
+      const lastStyleSheet = document.createElement('link')
+      lastStyleSheet.setAttribute('rel', 'stylesheet')
+      lastStyleSheet.href = 'https://www.w3.org/StyleSheets/TR/2016/W3C-ED'
+      find('head')[0].prepend(lastStyleSheet)
+    }
+
+    // write out the file
     const text = document.documentElement.outerHTML
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
 
-    return ret
+    const visited = await Promise.all(az.reduce( (acc, [relUrl, a]) => {
+      if (seen.has(relUrl))
+        return acc
+      seen.add(relUrl)
+      return acc.concat(this.copyRecursively(headMatter, toc, outDir, relUrl, seen))
+    }, []))
+
+    return {page, visited}
 
     function ensureDirectoryExistence(filePath) {
       var dirname = Path.dirname(filePath);
@@ -281,17 +287,23 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     }
   }
 
-  /**
+  /** calculate location info for page relative to this.relDir
    */
-  async loadPage (page, timeout) {
+  findIncludedResource (page) {
+    const path = Path.join(__dirname, this.relDir, page)
+    const url = new URL('file://' + path)
+    const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
+    return { path, url, dir }
+  }
+
+  /** load the DOM for {page}
+   */
+  async loadPageDom (page, timeout) {
     if (this.pageCache.has(page))
       return this.pageCache.get(page)
 
     // calculate relative path and effective URL
-    const path = Path.join(__dirname, this.relDir, page)
-    const url = new URL('file://' + path)
-    const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
-
+    const { path, url, dir } = this.findIncludedResource(page)
     const dom = new JSDOM(Fs.readFileSync(path, 'utf8'), Object.assign({
       url: url
     }, this.waitFor.length ? {
@@ -314,7 +326,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     const find = SphinxToTr.makeFind(document)
 
     // cache and return
-    const ret = { dom, path, url, dir, document, find }
+    const ret = { path, url, dir, dom, document, find }
     this.pageCache.set(page, ret)
     return ret
 
@@ -345,6 +357,13 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     ])
   }
 
+  // Adopt elt into document. abstracted in case JSODM impl changes
+  static adopt (document, elt) {
+    const ret = elt.cloneNode(true)
+    document.adoptNode(ret)
+    return ret
+  }
+
   // convenience function find to query DOM
   static makeFind (document) {
     const find =
@@ -359,21 +378,6 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     span.textContent = text
     classes.forEach( (c) => span.classList.add(c) )
     return span
-  }
-
-  static addNumber (document, a, secNo, linkText) {
-    if (linkText) {
-      if (linkText !== a.textContent)
-        throw new Error(`expected link to ${a.href} to have link text "${linkText}" - saw ${a.textContent}`)
-    } else {
-      linkText = a.textContent
-    }
-    a.textContent = ''
-    a.appendChild(SphinxToTr.span(document, secNo, ['secno']))
-    a.appendChild(document.createTextNode(' '))
-    a.appendChild(SphinxToTr.span(document, linkText, ['content']))
-    a.className = 'toxref'
-    return linkText
   }
 
   static localHrefs (elts, dir) {
