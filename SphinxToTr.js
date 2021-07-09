@@ -233,12 +233,11 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     }
 
     const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
-    // div class="sphinxsidebar" role="navigation" aria-label="main navigation"
+    // grab all TOC links before we (might) replace the TOC element
+    const visitQueue = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
     const oldNavs = find('[role=navigation]') // [id=toc]
-    let az = []
-      az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
 
-    if (oldNavs.length === 1 || oldNavs.length === 2) { // back to top link
+    if (oldNavs.length === 1 || oldNavs.length === 2) { // 0: sidebar TOC, 1: <a>back to top</a> link
 
       // transplant headMatter into <head/>
       {
@@ -256,11 +255,6 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
 
       // add the TOC
       find('body')[0].prepend(toc.getHtml(document, page))
-
-      const lastStyleSheet = document.createElement('link')
-      lastStyleSheet.setAttribute('rel', 'stylesheet')
-      lastStyleSheet.href = 'https://www.w3.org/StyleSheets/TR/2016/W3C-ED'
-      find('head')[0].prepend(lastStyleSheet)
     }
 
     // write out the file
@@ -268,7 +262,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
 
-    const visited = await Promise.all(az.reduce( (acc, [relUrl, a]) => {
+    const visited = await Promise.all(visitQueue.reduce( (acc, [relUrl, a]) => {
       if (seen.has(relUrl))
         return acc
       seen.add(relUrl)
@@ -397,7 +391,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
   // Manually walk children because there's no support for
   // :scope and I don't know how to find Element.prototype
   // needed for <https://stackoverflow.com/a/17989803/1243605>.
-  // const az = find(':scope > a', li)
+  // otherwise, we could use e.g. `find(':scope > a', li)`
   static childrenByName (parent, localName) {
     return [...parent.children].filter( (elt) => elt.localName === localName )
   }
