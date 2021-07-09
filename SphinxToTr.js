@@ -96,13 +96,10 @@ class SphinxToTr {
             if (ulz.length > 1)
               throw new Error(`found ${ulz.length} <ul/> elements in TOC entry ${li.outerHTML}`)
 
-            if ((urlStr.startsWith(dir) && urlStr.endsWith('index.html')) && ulz.length === 1)
-              console.log(secNo)
-
             const nested = (urlStr.startsWith(dir) && urlStr.endsWith('index.html'))
-            // index pages are TOCs and take precedence over embeded <ul/>s.
+                  // index pages have detailed TOCs and take precedence over embeded <ul/>s.
                   ? await visitPage(urlStr.substr(dir.length), secNo + '.')
-            // a <ul/> contains nested TOC entries on this page.
+                  // a <ul/> contains nested TOC entries on this page.
                   : (ulz.length === 1)
                   ? await visitUl(ulz[0], secNo + '.')
                   : null
@@ -225,6 +222,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     // div class="sphinxsidebar" role="navigation" aria-label="main navigation"
     const oldNavs = find('[role=navigation]') // [id=toc]
     let az = []
+      az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
 
     if (oldNavs.length === 1 || oldNavs.length === 2) { // back to top link
 
@@ -238,16 +236,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       }
 
       // remove old sidebar
-      az = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
       oldNavs[0].remove();
-
-      /*
-      const urlStrToElements =
-            SphinxToTr.localHrefs(find('a'), dir)
-            .reduce( (acc, [urlStr, elt]) => acc.set(urlStr, elt), new ArrayMap())
-      urlStrToElements.delete('')
-      console.log(`${page} has ${urlStrToElements.total} references to ${urlStrToElements.size} descendants of ${dir}`);
-      */
 
       [...find('a.headerlink')].forEach( (a) => toc.updateAnchor(document, a, page) )
 
