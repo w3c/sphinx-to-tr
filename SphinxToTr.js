@@ -161,8 +161,8 @@ class SphinxToTr {
       const searchBox = find('#searchbox')[0]
       const searchScript = searchBox.nextElementSibling
       const sphinxGenerated = searchBox.previousElementSibling
-      const immediateLis = ([...find('.toctree-wrapper > ul > li')])
-            .concat([...find('.simple > li')])
+      const immediateLis = find('.toctree-wrapper > ul > li')
+            .concat(find('.simple > li'))
 
       // copy respec <body/>
       const body = steal('body')
@@ -251,7 +251,10 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       // remove old sidebar
       oldNavs[0].remove();
 
-      [...find('a.headerlink')].forEach( (a) => toc.updateAnchor(document, a, page) )
+      // add secNos to all section headers
+      find('a.headerlink') // <a/>s forming paragraph markers in div headings
+        .concat(find('.toctree-wrapper a')) // <a/>s in <li/>s in a sub-TOC in an index page
+        .forEach( (a) => toc.updateAnchor(document, a, page) )
 
       // add the TOC
       find('body')[0].prepend(toc.getHtml(document, page))
