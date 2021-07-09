@@ -19,7 +19,9 @@ const WAIT_FOR = [] // ['$']
 // Debug by showing what pages are being loaded.
 const CHATTY_LOADER = false
 
-// Working class to translate Sphinx docs to W3C TR/ format
+/** Working class to translate Sphinx docs to W3C TR/ format
+ * This manipulates a set of included resources starting from this.relDir.
+ */
 class SphinxToTr {
   constructor (path) {
     const parsed = Path.parse(path)
@@ -38,6 +40,7 @@ class SphinxToTr {
   }
 
   /** indexPage - Crawl through sphinx index page to number sections
+   * called on page index.html, it will recurse through *\/index.html
    */
   async indexPage (
     // Which labels should not get numbers
@@ -61,7 +64,7 @@ class SphinxToTr {
     return ret
 
     async function visitPage (page, leader) {
-      const { dom, document, url, dir, find } = await self.loadPage(page, LOAD_TIMEOUT)
+      const { dom, document, url, dir, find } = await self.loadPageDom(page, LOAD_TIMEOUT)
 
       const tocs = find(selector + ' > ul')
       return tocs.length === 0
@@ -125,7 +128,7 @@ class SphinxToTr {
     // Sphinx index page
     page = this.startPage
   ) {
-    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
+    const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
     // globalThis.window = dom.window
     try {
       const { html, errors, warnings } = await toHTML(respecSrc, respecOptions);
@@ -218,7 +221,18 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
-    const { dom, document, url, dir, find } = await this.loadPage(page, LOAD_TIMEOUT)
+    const outFilePath = Path.join(outDir, page)
+    Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
+
+    // early return for non-HTML files
+    if (!page.endsWith('.html')) {
+      const buf = Fs.readFileSync(this.findIncludedResource(page).path)
+      Fs.writeFileSync(outFilePath, buf)
+      console.log(`${outFilePath}: ${buf.length} bytes`)
+      return { page, visisted: [] }
+    }
+
+    const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
     // div class="sphinxsidebar" role="navigation" aria-label="main navigation"
     const oldNavs = find('[role=navigation]') // [id=toc]
     let az = []
@@ -250,8 +264,6 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     }
 
     // write out the file
-    const outFilePath = Path.join(outDir, page)
-    Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
     const text = document.documentElement.outerHTML
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
@@ -275,17 +287,23 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     }
   }
 
-  /**
+  /** calculate location info for page relative to this.relDir
    */
-  async loadPage (page, timeout) {
+  findIncludedResource (page) {
+    const path = Path.join(__dirname, this.relDir, page)
+    const url = new URL('file://' + path)
+    const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
+    return { path, url, dir }
+  }
+
+  /** load the DOM for {page}
+   */
+  async loadPageDom (page, timeout) {
     if (this.pageCache.has(page))
       return this.pageCache.get(page)
 
     // calculate relative path and effective URL
-    const path = Path.join(__dirname, this.relDir, page)
-    const url = new URL('file://' + path)
-    const dir = url.href.substr(0, url.href.length - page.length) // new URL('..', url).href
-
+    const { path, url, dir } = this.findIncludedResource(page)
     const dom = new JSDOM(Fs.readFileSync(path, 'utf8'), Object.assign({
       url: url
     }, this.waitFor.length ? {
@@ -308,7 +326,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     const find = SphinxToTr.makeFind(document)
 
     // cache and return
-    const ret = { dom, path, url, dir, document, find }
+    const ret = { path, url, dir, dom, document, find }
     this.pageCache.set(page, ret)
     return ret
 
