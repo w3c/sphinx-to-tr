@@ -257,11 +257,16 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
         .forEach( (a) => toc.updateAnchor(document, a, page) )
 
       // add the TOC
-      find('body')[0].prepend(toc.getHtml(document, page))
+      const tocMarkup = toc.getHtml(document, page)
+      const sotdz = find('#sotd')
+      if (sotdz.length > 0)
+        sotdz[0].parentElement.insertBefore(tocMarkup, sotdz[0].nextSibling)
+      else
+        find('body')[0].prepend(tocMarkup)
     }
 
     // write out the file
-    const text = document.documentElement.outerHTML
+    const text = '<!DOCTYPE html>' + document.documentElement.outerHTML
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
 
