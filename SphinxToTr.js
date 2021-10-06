@@ -217,10 +217,12 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
   async copyRecursively (
     headMatter,
     toc,
+    topTemplate,
     outDir,
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
+    const pathToTop = page.split(/\//).slice(1).map(_ => '..').join('/')
     const outFilePath = Path.join(outDir, page)
     Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
 
@@ -258,15 +260,24 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
 
       // add the TOC
       const tocMarkup = toc.getHtml(document, page)
+
+      const substituted = topTemplate
+            .replace(/PATH_TO_TOP/, pathToTop)
+      const topDoc = new JSDOM(substituted, { url: 'http://a.example/' }).window.document
+      const toAdd = [tocMarkup, ...topDoc.getElementsByTagName('body')[0].children]
+            .map(n => SphinxToTr.adopt(document, n))
       const sotdz = find('#sotd')
-      if (sotdz.length > 0)
-        sotdz[0].parentElement.insertBefore(tocMarkup, sotdz[0].nextSibling)
-      else
-        find('body')[0].prepend(tocMarkup)
+      if (sotdz.length > 0) {
+        // sotdz[0].parentElement.insertBefore(tocMarkup, sotdz[0].nextSibling);
+        toAdd.forEach(node => sotdz[0].parentElement.insertBefore(node, sotdz[0].nextSibling))
+      } else {
+        toAdd.reverse().forEach(node => find('body')[0].prepend(node))
+        // find('body')[0].prepend(tocMarkup)
+      }
     }
 
     // write out the file
-    const text = '<!DOCTYPE html>' + document.documentElement.outerHTML
+    const text = document.documentElement.outerHTML
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
 
@@ -274,7 +285,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       if (seen.has(relUrl))
         return acc
       seen.add(relUrl)
-      return acc.concat(this.copyRecursively(headMatter, toc, outDir, relUrl, seen))
+      return acc.concat(this.copyRecursively(headMatter, toc, topTemplate, outDir, relUrl, seen))
     }, []))
 
     return {page, visited}
