@@ -142,6 +142,19 @@ class SphinxToTr {
       respec.doc = respec.dom.window.document
       respec.find = SphinxToTr.makeFind(respec.doc)
 
+      // extract and format publication date
+      const iso = respec.doc.querySelector(".dt-published").getAttribute("datetime")
+      const human = new Intl.DateTimeFormat('en', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit'
+      }).format(new Date(iso))
+            .replace(
+              /([A-Za-z]+) ([0-9]+), ([0-9]+)/, // Month DD, YYYY
+              "$2 $1 $3"                        // DD Month YYYY
+            )                                   // could break in year 10k
+      this.publicationDate = { iso, human }
+
       // copy respec <head/>
       const respecHead = respec.find('head')[0]
       {
@@ -233,10 +246,9 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       console.log(`${outFilePath}: ${buf.length} bytes`)
       return { page, visisted: [] }
     }
-
     const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
     // grab all TOC links before we (might) replace the TOC element
-    const visitQueue = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a'), dir)
+    const visitQueue = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a, form[action]'), dir)
     const oldNavs = find('[role=navigation]') // [id=toc]
 
     if (oldNavs.length === 1 || oldNavs.length === 2) { // 0: sidebar TOC, 1: <a>back to top</a> link
@@ -262,7 +274,9 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       const tocMarkup = toc.getHtml(document, page)
 
       const substituted = topTemplate
-            .replace(/PATH_TO_TOP/, pathToTop)
+            .replace(/PATH_TO_TOP/g, pathToTop)
+            .replace(/PUBLICATION_DATE_ISO/g, this.publicationDate.iso)
+            .replace(/PUBLICATION_DATE_HUMAN/g, this.publicationDate.human)
       const topDoc = new JSDOM(substituted, { url: 'http://a.example/' }).window.document
       const toAdd = [tocMarkup, ...topDoc.getElementsByTagName('body')[0].children]
             .map(n => SphinxToTr.adopt(document, n))
@@ -395,7 +409,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
 
   static localHrefs (elts, dir) {
     return elts
-      .map( (elt) => [SphinxToTr.noHash(elt.href), elt] )
+      .map( (elt) => [SphinxToTr.noHash(elt.href || elt.action), elt] )
       .filter( ([urlStr, elt]) => [urlStr.startsWith(dir), elt] )
       .map( ([urlStr, elt]) => [urlStr.substr(dir.length), elt] )
   }
