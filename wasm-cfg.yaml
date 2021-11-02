@@ -1,0 +1,5 @@
+indexPath: ../../webassembly/spec/core/index.html
+frontMatterFile: wasm-respec.html
+topMatterFile: wasm-top.html
+outDir: out
+unnumberedLinkText: []

@@ -235,7 +235,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
-    const pathToTop = page.split(/\//).slice(1).map(_ => '..').join('/')
+    const pathToTop = page.split(/\//).slice(1).map(_ => '..').join('/') || '.'
     const outFilePath = Path.join(outDir, page)
     Fs.mkdirSync(Path.dirname(outFilePath), {recursive: true})
 
