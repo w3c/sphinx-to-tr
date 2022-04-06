@@ -1,32 +1,41 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8" />
     <title>WebAssembly Core Specification</title>
-    <script src="./node_modules/respec/builds/respec-w3c.js" async class="remove"></script>
-    <!-- <script src="https://www.w3.org/Tools/respec/respec-w3c" async class="remove"></script> -->
-    <script class="remove">
-      // All config options at https://respec.org/docs/
+    <meta name='charset' content='utf-8'/>
+    <script src='https://www.w3.org/Tools/respec/respec-w3c' class='remove' defer></script>
+    <!-- <script src='./node_modules/respec/builds/respec-w3c.js' class='remove' defer></script> -->
+    <script class='remove'>
       var respecConfig = {
-        "group": "wasm",
-        "xref": true,
-        "specStatus": "WD",
-        "shortName": "wasm-core",
-        "prevVersion": "REC",
-        "previousPublishDate": "2019-12-05",
-        "previousMaturity": "REC",
-        "editors": [
-          {
-            "name": "Andreas Rossberg",
-            "company": "Dfinity Stiftung",
-            "companyURL": "https://dfinity.org/",
-            "w3cid": 82328
-          }
-        ],
-        "github": "WebAssembly/spec/",
-        "wgPublicList": "public-webassembly",
-        "subjectPrefix": "[wasm-core-1]",
-      }
+          specStatus:           "WD",
+          shortName:            "wasm-core-1.1",
+          prevRecShortname:     "wasm-core-1",
+          edDraftURI:           "https://webassembly.github.io/spec/core/",
+          github:               "https://github.com/WebAssembly/spec/",
+          caniuse:              "wasm",
+          editors: [
+            {
+              name: "Andreas Rossberg",
+              company: "Dfinity Stiftung",
+              companyURL: "https://dfinity.org/",
+              w3cid: 82328
+            }
+          ],
+          group: "wasm",
+          lint: {
+            "privsec-section": false,
+          },
+          doJsonLd: true,
+          xref: true,
+          prevRecURI: "https://www.w3.org/TR/2019/REC-wasm-core-1-20191205/",
+          prevRecShortname: "wasm-core-1",
+          XXXpreviousPublishDate: "2019-12-05",
+          XXXpreviousMaturity: "REC",
+          XXXpreviousDiffURI: "",
+          wgPublicList: "public-webassembly",
+          subjectPrefix: "[wasm-core]",
+          mdn: false, // note: wasm-js-api.json and wasm-web-embedding.json in <https://w3c.github.io/mdn-spec-links/SPECMAP.json>
+    }
     </script>
     <style>
       .youAreHere { background-color: lightyellow }
@@ -34,13 +43,12 @@
     </style>
   </head>
   <body>
-    <section id="abstract">
-      <p>This document describes version 1.0 of the core WebAssembly standard, a safe, portable, low-level code format designed for efficient execution and compact representation.</p>
-      <p>Part of a collection of related documents:
+    <section id="abstract"><span class="secno>1</span> <span class="content>
+        This document describes version 1.0 of the core WebAssembly standard, a safe, portable, low-level code format designed for efficient execution and compact representation.
+        WebAseembly Core is part of a collection of WebAssembly specifications:
         the <a href="https://www.w3.org/TR/wasm-core/">Core WebAssembly Specification</a>,
         the <a href="https://www.w3.org/TR/wasm-js-api/">WebAssembly JS Interface</a>,
         and the <a href="https://www.w3.org/TR/wasm-web-api/">WebAssembly Web API</a>.
-      </p>
     </section>
     <section id="sotd">
       <p>Technical comments are welcomed by the Working Group to improve future versions of WebAssembly.
@@ -52,6 +60,18 @@
       </p>
     </section>
     <section id="conformance">
+      <p>
+        This is required for specifications that contain normative material.
+      </p>
+    </section>
+    <section id="#security">
+      <h2 id="security-considerations">Security Considerations</h2>
+      <p>
+        This is required for specifications that contain normative material.
+      </p>
+    </section>
+    <section id="#privacy">
+      <h2 id="privacy-considerations">Privacy Considerations</h2>
       <p>
         This is required for specifications that contain normative material.
       </p>
