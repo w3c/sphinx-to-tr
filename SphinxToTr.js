@@ -232,6 +232,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
     toc,
     topTemplate,
     outDir,
+    attributeRewrites = {},
     page = this.startPage,
     seen = new InitializedSet(page)
   ) {
@@ -247,6 +248,29 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       return { page, visisted: [] }
     }
     const { dom, document, url, dir, find } = await this.loadPageDom(page, LOAD_TIMEOUT)
+
+    // execute attributeRewrites
+    const rewrittenAttributeValues = Object.entries(attributeRewrites).reduce((mappedForAttr, entry) => {
+      const [attributeName, list] = entry
+      const rws = [...find(`[${attributeName}]`)];
+      return mappedForAttr.concat(rws.reduce((mappedForElt, elt) => {
+        const tagName = elt.tagName
+        const oldValue = elt.getAttribute(attributeName)
+        const found = list.reduce((found, rw) => {
+          if (found) return found; // Array.find-like semantics
+          const newValue = oldValue.replace(new RegExp(rw.from), rw.to)
+          if (newValue === oldValue)
+            return false
+          elt.setAttribute(attributeName, newValue)
+          return { tagName, attributeName, oldValue, newValue }
+        }, null)
+        return found
+            ? mappedForElt.concat([found])
+            : mappedForElt
+      }, []))
+    }, [])
+    // console.log(rewrittenAttributeValues)
+
     // grab all TOC links before we (might) replace the TOC element
     const visitQueue = SphinxToTr.localHrefs(find('[id=toc][role=navigation] a, form[action]'), dir)
     const oldNavs = find('[role=navigation]') // [id=toc]
@@ -300,7 +324,7 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
       if (seen.has(relUrl))
         return acc
       seen.add(relUrl)
-      return acc.concat(this.copyRecursively(headMatter, toc, topTemplate, outDir, relUrl, seen))
+      return acc.concat(this.copyRecursively(headMatter, toc, topTemplate, outDir, attributeRewrites, relUrl, seen))
     }, []))
 
     return {page, visited}

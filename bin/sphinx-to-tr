@@ -23,7 +23,7 @@ async function run (opts) {
 ${exe} foo-cfg.yaml`, -1)
   }
   try {
-    const {indexPath, frontMatterFile, topMatterFile, outDir, unnumberedLinkText} = Yaml.load(Fs.readFileSync(process.argv[2], 'utf8'))
+    const {indexPath, frontMatterFile, topMatterFile, outDir, unnumberedLinkText, attributeRewrites} = Yaml.load(Fs.readFileSync(process.argv[2], 'utf8'))
     const log = new Logger(opts.verbose);
     const translator = new SphinxToTr(indexPath)
     const toc = await translator.indexPage(unnumberedLinkText || [])
@@ -36,7 +36,7 @@ ${exe} foo-cfg.yaml`, -1)
         disableSandbox: opts["disable-sandbox"],
         devtools: opts.devtools,
       })
-    const copied = await translator.copyRecursively(headMatter, toc, Fs.readFileSync(topMatterFile, 'utf8'), outDir)
+    const copied = await translator.copyRecursively(headMatter, toc, Fs.readFileSync(topMatterFile, 'utf8'), outDir, attributeRewrites)
     // console.log(JSON.stringify(copied, null, 2))
   } catch (e) {
     fail(e, -1)

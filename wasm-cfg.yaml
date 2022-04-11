@@ -3,3 +3,7 @@ frontMatterFile: wasm-respec.html
 topMatterFile: wasm-top.html
 outDir: out
 unnumberedLinkText: []
+attributeRewrites:
+  src:
+  - from: https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js.*
+    to: /scripts/MathJax/2.7.5/latest.js
