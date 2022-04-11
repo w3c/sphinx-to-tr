@@ -278,20 +278,21 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
             .replace(/PUBLICATION_DATE_ISO/g, this.publicationDate.iso)
             .replace(/PUBLICATION_DATE_HUMAN/g, this.publicationDate.human)
       const topDoc = new JSDOM(substituted, { url: 'http://a.example/' }).window.document
-      const toAdd = [tocMarkup, ...topDoc.getElementsByTagName('body')[0].children]
-            .map(n => SphinxToTr.adopt(document, n))
       const sotdz = find('#sotd')
       if (sotdz.length > 0) {
         // sotdz[0].parentElement.insertBefore(tocMarkup, sotdz[0].nextSibling);
-        toAdd.forEach(node => sotdz[0].parentElement.insertBefore(node, sotdz[0].nextSibling))
+        // toAdd.forEach(node => sotdz[0].parentElement.insertBefore(node, sotdz[0].nextSibling))
+        sotdz[0].parentElement.insertBefore(tocMarkup, sotdz[0].nextSibling)
       } else {
+        const toAdd = [tocMarkup, ...topDoc.getElementsByTagName('body')[0].children]
+            .map(n => SphinxToTr.adopt(document, n))
         toAdd.reverse().forEach(node => find('body')[0].prepend(node))
         // find('body')[0].prepend(tocMarkup)
       }
     }
 
     // write out the file
-    const text = document.documentElement.outerHTML
+    const text = '<!DOCTYPE html>' + document.documentElement.outerHTML
     Fs.writeFileSync(outFilePath, text, {encoding: 'utf-8'})
     console.log(`${outFilePath}: ${text.length} chars`)
 
@@ -339,7 +340,8 @@ ret.map( (elt) => elt.outerHTML ).join(',\n')
         ? new ChattyResourceLoader()
         : "usable",
     } : {}))
-    // work around bug in MathJax appVersion parser
+
+    // work around (old?) bug in MathJax appVersion parser:
     // dom.window.navigator.appVersion = dom.window.navigator.userAgent
 
     await SphinxToTr.domContentLoaded(dom, timeout, page)
